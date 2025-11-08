@@ -1,0 +1,37 @@
+# Objective
+  This project is for Create, Modify, Delete, Update the history of items.
+  The applicaton is in python and working on AWS lambda and API gateway and dynamodb.
+  AWS structure is handled by serverless.yml.
+  Two staged is needed, dev and op and there is a way to select the stage before test and deploy.
+
+# environment setup
+  Python3.10 is needed.
+  serverless framework is needed.
+  AWS CLI is needed and configured with the proper user which has the permission to handle the resources.
+  resources/env.json to set the environment variables for each stage.
+  The npm script should be supported to deploy or remove AWS resources.
+  pythonRequirement is with the option "slim: true"
+
+# Pages.
+## Login.
+  Google OAuth2 is used for login.
+  There is a dynamodb for the allowed user's email.
+  There a admin email. This email should be set in the env.json file and it should be added to the allowed user's email in lambda.
+### For the admin email
+  allow to login even if it is not in the allowed user's email table.
+### For others
+  First login attempt, show the message "You are not allowed to access this application. Please wait for the admin to add your email to the allowed user's email list."
+## User management page.
+  Only admin can access this page.
+  Show the all user email list to allow, remove, or forbidden the email.
+## Data Page
+  Default is only show 2 weeks data.
+  Next or Prev button show the next or prev data.
+  Add data at the top of the table.
+  Radion button to remove or edit the item.
+  Confirm remove popup and Edit page should be supported.
+## Searching page.
+  Searching options
+  1. date range.
+  2. name.
+  3. text for searching all element.

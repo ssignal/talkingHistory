@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search - Talking History</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-primary {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .btn-secondary {
+            background-color: #2196F3;
+            color: white;
+            margin: 0 5px;
+        }
+        .btn-danger {
+            background-color: #f44336;
+            color: white;
+        }
+        .search-form {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        .search-form label {
+            display: block;
+            margin: 10px 0 5px 0;
+            font-weight: bold;
+        }
+        .search-form input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #2196F3;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Search History</h1>
+            <div>
+                {% if session.get('is_admin') %}
+                <button class="btn btn-secondary" onclick="location.href='/users'">Manage Users</button>
+                {% endif %}
+                <button class="btn btn-secondary" onclick="location.href='/data'">Back to Data</button>
+                <button class="btn btn-danger" onclick="location.href='/logout'">Logout</button>
+            </div>
+        </div>
+
+        <div class="search-form">
+            <h3>Search Options</h3>
+            
+            <label>Date Range:</label>
+            <input type="date" id="startDate">
+            <input type="date" id="endDate">
+
+            <label>Name:</label>
+            <input type="text" id="searchName" placeholder="Search by name">
+
+            <label>Search All Fields:</label>
+            <input type="text" id="searchText" placeholder="Search in all fields">
+
+            <button class="btn btn-primary" onclick="search()">Search</button>
+            <button class="btn btn-secondary" onclick="clearSearch()">Clear</button>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody id="resultsTable">
+                <tr>
+                    <td colspan="3" style="text-align: center;">Enter search criteria and click Search</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        function search() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            const name = document.getElementById('searchName').value;
+            const searchText = document.getElementById('searchText').value;
+
+            let url = '/api/search?';
+            if (startDate) url += `startDate=${startDate}&`;
+            if (endDate) url += `endDate=${endDate}&`;
+            if (name) url += `name=${encodeURIComponent(name)}&`;
+            if (searchText) url += `searchText=${encodeURIComponent(searchText)}&`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.getElementById('resultsTable');
+                    tbody.innerHTML = '';
+
+                    if (data.items.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">No results found</td></tr>';
+                        return;
+                    }
+
+                    data.items.forEach(item => {
+                        const row = tbody.insertRow();
+                        row.innerHTML = `
+                            <td>${item.name}</td>
+                            <td>${item.description}</td>
+                            <td>${new Date(item.createdAt).toLocaleString()}</td>
+                        `;
+                    });
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Search failed: ' + error.message);
+                });
+        }
+
+        function clearSearch() {
+            document.getElementById('startDate').value = '';
+            document.getElementById('endDate').value = '';
+            document.getElementById('searchName').value = '';
+            document.getElementById('searchText').value = '';
+            document.getElementById('resultsTable').innerHTML = '<tr><td colspan="3" style="text-align: center;">Enter search criteria and click Search</td></tr>';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - Talking History</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-primary {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .btn-secondary {
+            background-color: #2196F3;
+            color: white;
+            margin: 0 5px;
+        }
+        .btn-danger {
+            background-color: #f44336;
+            color: white;
+        }
+        .add-form {
+            display: none;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        .add-form input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #FF9800;
+            color: white;
+        }
+        .admin-badge {
+            background-color: #FF9800;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 400px;
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>User Management</h1>
+            <div>
+                <button class="btn btn-secondary" onclick="location.href='/data'">Back to Data</button>
+                <button class="btn btn-danger" onclick="location.href='/logout'">Logout</button>
+            </div>
+        </div>
+
+        <button class="btn btn-primary" onclick="toggleAddForm()">+ Add User</button>
+
+        <div class="add-form" id="addForm">
+            <h3>Add New User</h3>
+            <input type="email" id="newEmail" placeholder="user@example.com" required>
+            <button class="btn btn-primary" onclick="addUser()">Add</button>
+            <button class="btn btn-secondary" onclick="toggleAddForm()">Cancel</button>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="usersTable">
+            </tbody>
+        </table>
+    </div>
+
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <h3>Confirm Delete</h3>
+            <p>Are you sure you want to remove this user?</p>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let userToDelete = null;
+
+        function toggleAddForm() {
+            const form = document.getElementById('addForm');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+            document.getElementById('newEmail').value = '';
+        }
+
+        function loadUsers() {
+            fetch('/api/users')
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.getElementById('usersTable');
+                    tbody.innerHTML = '';
+                    
+                    data.users.forEach(user => {
+                        const row = tbody.insertRow();
+                        const isAdmin = user.email === '{{ session.get("email") }}';
+                        row.innerHTML = `
+                            <td>
+                                ${user.email}
+                                ${isAdmin ? '<span class="admin-badge">ADMIN</span>' : ''}
+                            </td>
+                            <td>
+                                ${!isAdmin ? `<button class="btn btn-danger" onclick='deleteUser("${user.email}")'>Remove</button>` : ''}
+                            </td>
+                        `;
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading users:', error);
+                    alert('Failed to load users: ' + error.message);
+                });
+        }
+
+        function addUser() {
+            const email = document.getElementById('newEmail').value;
+
+            if (!email) {
+                alert('Please enter an email address');
+                return;
+            }
+
+            // Basic email validation
+            if (!email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+                alert('Please enter a valid email address');
+                return;
+            }
+
+            fetch('/api/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    toggleAddForm();
+                    loadUsers();
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to add user'));
+                }
+            })
+            .catch(error => {
+                alert('Error: ' + error.message);
+            });
+        }
+
+        function deleteUser(email) {
+            userToDelete = email;
+            document.getElementById('confirmModal').style.display = 'block';
+        }
+
+        function confirmDelete() {
+            if (userToDelete) {
+                fetch(`/api/users/${encodeURIComponent(userToDelete)}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        loadUsers();
+                        closeModal();
+                    } else {
+                        alert('Error: ' + (data.error || 'Failed to delete user'));
+                        closeModal();
+                    }
+                })
+                .catch(error => {
+                    alert('Error: ' + error.message);
+                    closeModal();
+                });
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('confirmModal').style.display = 'none';
+            userToDelete = null;
+        }
+
+        loadUsers();
+    </script>
+</body>
+</html>

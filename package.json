@@ -1,0 +1,18 @@
+{
+  "name": "talking-history",
+  "version": "1.0.0",
+  "description": "AWS Lambda web application for managing history items",
+  "scripts": {
+    "deploy:dev": "serverless deploy --stage dev",
+    "deploy:op": "serverless deploy --stage op",
+    "remove:dev": "serverless remove --stage dev",
+    "remove:op": "serverless remove --stage op",
+    "logs:dev": "serverless logs -f app --stage dev --tail",
+    "logs:op": "serverless logs -f app --stage op --tail",
+    "serve": "serverless wsgi serve",
+    "install:all": "npm install && pip install -r requirements.txt"
+  },
+  "devDependencies": {
+    "serverless-python-requirements": "^6.1.0"
+  }
+}

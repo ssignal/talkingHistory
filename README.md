@@ -23,7 +23,7 @@ A Python web application for managing history items, running on AWS Lambda with 
 ### Prerequisites
 
 - Node.js and npm (for Serverless Framework)
-- Python 3.11
+- Python 3.10
 - AWS CLI configured with appropriate credentials
 - Serverless Framework
 
@@ -49,27 +49,53 @@ pip install -r requirements.txt
    - Add authorized redirect URIs
    - Copy the Client ID
 
-4. Set environment variables:
-```bash
-export GOOGLE_CLIENT_ID="your-google-client-id.apps.googleusercontent.com"
-export SECRET_KEY="your-secret-key-for-sessions"
+4. Set environment variables in `resource/env.json` for each stage:
+```json
+{
+  "dev": {
+    "GOOGLE_CLIENT_ID": "your-dev-google-client-id.apps.googleusercontent.com",
+    "SECRET_KEY": "your-dev-secret-key",
+    "ADMIN_EMAIL": "admin@example.com"
+  },
+  "op": {
+    "GOOGLE_CLIENT_ID": "your-op-google-client-id.apps.googleusercontent.com",
+    "SECRET_KEY": "your-op-secret-key",
+    "ADMIN_EMAIL": "admin@example.com"
+  }
+}
 ```
+
+Note: 
+- You can use the same Google Client ID for both stages or create separate OAuth credentials for each environment.
+- The ADMIN_EMAIL will be automatically added to the allowed users table when the Lambda function initializes.
 
 ### Deployment
 
 Deploy to dev stage:
 ```bash
+npm run deploy:dev
+# or
 serverless deploy --stage dev
 ```
 
 Deploy to op (production) stage:
 ```bash
+npm run deploy:op
+# or
 serverless deploy --stage op
+```
+
+Remove deployments:
+```bash
+npm run remove:dev  # Remove dev
+npm run remove:op   # Remove production
 ```
 
 ### Adding Authorized Users
 
-To authorize users, add their email addresses to the DynamoDB users table:
+The admin email from `resource/env.json` is automatically added to the users table when the Lambda function initializes.
+
+To add additional authorized users, add their email addresses to the DynamoDB users table:
 
 ```bash
 aws dynamodb put-item \
@@ -85,6 +111,10 @@ aws dynamodb put-item \
 - `GET /logout` - Logout user
 - `GET /data` - Data management page
 - `GET /search` - Search page
+- `GET /users` - User management page (admin only)
+- `GET /api/users` - Get all users (admin only)
+- `POST /api/users` - Add new user (admin only)
+- `DELETE /api/users/<email>` - Remove user (admin only)
 - `GET /api/history` - Get history items (with date range)
 - `POST /api/history` - Create new history item
 - `PUT /api/history/<id>` - Update history item
