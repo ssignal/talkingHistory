@@ -1,5 +1,7 @@
 # Objective
   This project is for Create, Modify, Delete, Update the history of items.
+  Each user can login to the application and see the data.
+  The data is allowed only for the user who is created.
   The applicaton is in python and working on AWS lambda and API gateway and dynamodb.
   AWS structure is handled by serverless.yml.
   Two staged is needed, dev and op and there is a way to select the stage before test and deploy.
@@ -10,7 +12,7 @@
   AWS CLI is needed and configured with the proper user which has the permission to handle the resources.
   resources/env.json to set the environment variables for each stage.
   The npm script should be supported to deploy or remove AWS resources.
-  pythonRequirement is with the option "slim: true"
+  pythonRequirement is with the option "slim: true".
 
 # Pages.
 ## Login.
@@ -21,10 +23,15 @@
   allow to login even if it is not in the allowed user's email table.
 ### For others
   First login attempt, show the message "You are not allowed to access this application. Please wait for the admin to add your email to the allowed user's email list."
+## Secret Key page.
+  After login user should input the secret key, this key stored in browser local storage.
+  This key is used for encrypting and decrypting the data.
+  Data is stored encrypted in dynamodb.
 ## User management page.
   Only admin can access this page.
   Show the all user email list to allow, remove, or forbidden the email.
 ## Data Page
+  Show the date ranage for the data in the table.
   Default is only show 2 weeks data.
   Next or Prev button show the next or prev data.
   Add data at the top of the table.
@@ -35,3 +42,12 @@
   1. date range.
   2. name.
   3. text for searching all element.
+  4. options
+    Match all conditions.
+    Match any conditions.
+    String match case sensitive or not.
+## Add item page.
+  Form to add the item.
+  Name, text, date should be supported.
+  For the date, user can type text or select from the date picker.
+  After adding the item, refresh the data page to show the latest data.

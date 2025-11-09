@@ -81,7 +81,11 @@
         function handleCredentialResponse(response) {
             document.getElementById('loading').style.display = 'block';
             
-            fetch('/login', {
+            // Get current path to determine stage
+            const pathParts = window.location.pathname.split('/');
+            const stage = pathParts[1] || 'dev';
+            
+            fetch(`/${stage}/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -94,7 +98,7 @@
             .then(data => {
                 document.getElementById('loading').style.display = 'none';
                 if (data.success) {
-                    window.location.href = '/data';
+                    window.location.href = data.redirect || `/${stage}/data`;
                 } else {
                     showError(data.message || 'Login failed');
                 }

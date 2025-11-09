@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Search - Talking History</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -85,10 +86,10 @@
             <h1>Search History</h1>
             <div>
                 {% if session.get('is_admin') %}
-                <button class="btn btn-secondary" onclick="location.href='/users'">Manage Users</button>
+                <button class="btn btn-secondary" onclick="location.href='/{{ stage }}/users'">Manage Users</button>
                 {% endif %}
-                <button class="btn btn-secondary" onclick="location.href='/data'">Back to Data</button>
-                <button class="btn btn-danger" onclick="location.href='/logout'">Logout</button>
+                <button class="btn btn-secondary" onclick="location.href='/{{ stage }}/data'">Back to Data</button>
+                <button class="btn btn-danger" onclick="location.href='/{{ stage }}/logout'">Logout</button>
             </div>
         </div>
 
@@ -105,15 +106,31 @@
             <label>Search All Fields:</label>
             <input type="text" id="searchText" placeholder="Search in all fields">
 
-            <button class="btn btn-primary" onclick="search()">Search</button>
-            <button class="btn btn-secondary" onclick="clearSearch()">Clear</button>
+            <label>Match Mode:</label>
+            <div style="margin: 10px 0;">
+                <label style="display: inline-block; margin-right: 20px;">
+                    <input type="radio" name="matchMode" value="all" checked> Match all conditions
+                </label>
+                <label style="display: inline-block;">
+                    <input type="radio" name="matchMode" value="any"> Match any condition
+                </label>
+            </div>
+
+            <label style="display: inline-block; margin-top: 10px;">
+                <input type="checkbox" id="caseSensitive"> Case sensitive search
+            </label>
+
+            <div style="margin-top: 15px;">
+                <button class="btn btn-primary" onclick="search()">Search</button>
+                <button class="btn btn-secondary" onclick="clearSearch()">Clear</button>
+            </div>
         </div>
 
         <table>
             <thead>
                 <tr>
                     <th>Name</th>
-                    <th>Description</th>
+                    <th>Text/Description</th>
                     <th>Date</th>
                 </tr>
             </thead>
@@ -126,17 +143,39 @@
     </div>
 
     <script>
+        const stage = '{{ stage }}';
+        
+        // Check if secret key exists
+        const secretKey = localStorage.getItem('secretKey');
+        if (!secretKey) {
+            window.location.href = `/${stage}/secret`;
+        }
+
+        // Decryption function
+        function decryptData(ciphertext) {
+            try {
+                const bytes = CryptoJS.AES.decrypt(ciphertext, secretKey);
+                return bytes.toString(CryptoJS.enc.Utf8);
+            } catch (e) {
+                console.error('Decryption error:', e);
+                return '[Decryption Failed]';
+            }
+        }
+        
         function search() {
             const startDate = document.getElementById('startDate').value;
             const endDate = document.getElementById('endDate').value;
             const name = document.getElementById('searchName').value;
             const searchText = document.getElementById('searchText').value;
+            const matchMode = document.querySelector('input[name="matchMode"]:checked').value;
+            const caseSensitive = document.getElementById('caseSensitive').checked;
 
-            let url = '/api/search?';
+            // Note: Search will happen on encrypted data server-side
+            // This is a limitation - we can only search after decrypting on client-side
+            // So we fetch all data and filter client-side
+            let url = `/${stage}/api/history?`;
             if (startDate) url += `startDate=${startDate}&`;
             if (endDate) url += `endDate=${endDate}&`;
-            if (name) url += `name=${encodeURIComponent(name)}&`;
-            if (searchText) url += `searchText=${encodeURIComponent(searchText)}&`;
 
             fetch(url)
                 .then(response => response.json())
@@ -144,16 +183,51 @@
                     const tbody = document.getElementById('resultsTable');
                     tbody.innerHTML = '';
 
-                    if (data.items.length === 0) {
+                    // Decrypt and filter on client-side
+                    let filteredItems = data.items.map(item => {
+                        return {
+                            ...item,
+                            decryptedName: decryptData(item.name),
+                            decryptedText: decryptData(item.text || item.description || '')
+                        };
+                    });
+
+                    // Apply filters
+                    filteredItems = filteredItems.filter(item => {
+                        const matches = [];
+                        
+                        // Name filter
+                        if (name) {
+                            const nameMatch = caseSensitive
+                                ? item.decryptedName.includes(name)
+                                : item.decryptedName.toLowerCase().includes(name.toLowerCase());
+                            matches.push(nameMatch);
+                        }
+                        
+                        // Text search filter
+                        if (searchText) {
+                            const searchableText = item.decryptedName + ' ' + item.decryptedText;
+                            const textMatch = caseSensitive
+                                ? searchableText.includes(searchText)
+                                : searchableText.toLowerCase().includes(searchText.toLowerCase());
+                            matches.push(textMatch);
+                        }
+                        
+                        // Apply match mode
+                        if (matches.length === 0) return true; // No filters
+                        return matchMode === 'all' ? matches.every(m => m) : matches.some(m => m);
+                    });
+
+                    if (filteredItems.length === 0) {
                         tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">No results found</td></tr>';
                         return;
                     }
 
-                    data.items.forEach(item => {
+                    filteredItems.forEach(item => {
                         const row = tbody.insertRow();
                         row.innerHTML = `
-                            <td>${item.name}</td>
-                            <td>${item.description}</td>
+                            <td>${item.decryptedName}</td>
+                            <td>${item.decryptedText}</td>
                             <td>${new Date(item.createdAt).toLocaleString()}</td>
                         `;
                     });
@@ -169,6 +243,8 @@
             document.getElementById('endDate').value = '';
             document.getElementById('searchName').value = '';
             document.getElementById('searchText').value = '';
+            document.querySelector('input[name="matchMode"][value="all"]').checked = true;
+            document.getElementById('caseSensitive').checked = false;
             document.getElementById('resultsTable').innerHTML = '<tr><td colspan="3" style="text-align: center;">Enter search criteria and click Search</td></tr>';
         }
     </script>

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Item - Talking History</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        h1 {
+            color: #333;
+            margin: 0;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+        }
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        .date-input-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .date-input-group input[type="text"] {
+            flex: 1;
+        }
+        .date-input-group input[type="date"] {
+            flex: 1;
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .btn-primary {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #45a049;
+        }
+        .btn-secondary {
+            background-color: #2196F3;
+            color: white;
+            margin-left: 10px;
+        }
+        .btn-secondary:hover {
+            background-color: #0b7dda;
+        }
+        .btn-danger {
+            background-color: #f44336;
+            color: white;
+        }
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+        .help-text {
+            font-size: 12px;
+            color: #777;
+            margin-top: 4px;
+        }
+        .success-message {
+            display: none;
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .error-message {
+            display: none;
+            background-color: #f44336;
+            color: white;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Add New Item</h1>
+            <div>
+                <button class="btn btn-secondary" onclick="location.href='/{{ stage }}/data'">Back to Data</button>
+                <button class="btn btn-danger" onclick="location.href='/{{ stage }}/logout'">Logout</button>
+            </div>
+        </div>
+
+        <div class="success-message" id="successMessage">
+            Item added successfully! Redirecting to data page...
+        </div>
+
+        <div class="error-message" id="errorMessage">
+        </div>
+
+        <form id="addItemForm" onsubmit="submitForm(event)">
+            <div class="form-group">
+                <label for="name">Name *</label>
+                <input type="text" id="name" name="name" required placeholder="Enter item name">
+            </div>
+
+            <div class="form-group">
+                <label for="text">Text/Description *</label>
+                <textarea id="text" name="text" required placeholder="Enter detailed description"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="date">Date</label>
+                <div class="date-input-group">
+                    <input type="text" id="dateText" placeholder="e.g., 2025-11-09 or Yesterday">
+                    <span>OR</span>
+                    <input type="date" id="datePicker">
+                </div>
+                <div class="help-text">
+                    Leave empty to use current date/time. You can type a date or use the date picker.
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Save Item</button>
+                <button type="button" class="btn btn-secondary" onclick="location.href='/{{ stage }}/data'">Cancel</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        const stage = '{{ stage }}';
+        
+        // Check if secret key exists
+        const secretKey = localStorage.getItem('secretKey');
+        if (!secretKey) {
+            window.location.href = `/${stage}/secret`;
+        }
+
+        // Encryption function
+        function encryptData(text) {
+            return CryptoJS.AES.encrypt(text, secretKey).toString();
+        }
+
+        // Sync date inputs
+        document.getElementById('dateText').addEventListener('change', function() {
+            if (this.value) {
+                document.getElementById('datePicker').value = '';
+            }
+        });
+
+        document.getElementById('datePicker').addEventListener('change', function() {
+            if (this.value) {
+                document.getElementById('dateText').value = this.value;
+            }
+        });
+
+        function submitForm(event) {
+            event.preventDefault();
+
+            const name = document.getElementById('name').value;
+            const text = document.getElementById('text').value;
+            const dateText = document.getElementById('dateText').value;
+            const datePicker = document.getElementById('datePicker').value;
+
+            let itemDate = null;
+            
+            // Prefer date picker if set, otherwise use text input
+            if (datePicker) {
+                itemDate = new Date(datePicker).toISOString();
+            } else if (dateText) {
+                try {
+                    itemDate = new Date(dateText).toISOString();
+                } catch (e) {
+                    // If parsing fails, let backend handle it
+                    itemDate = dateText;
+                }
+            }
+
+            const payload = {
+                name: encryptData(name),
+                text: encryptData(text),
+                description: encryptData(text),
+                date: itemDate
+            };
+
+            fetch(`/${stage}/api/history`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('successMessage').style.display = 'block';
+                    document.getElementById('errorMessage').style.display = 'none';
+                    
+                    // Redirect after 1.5 seconds
+                    setTimeout(() => {
+                        window.location.href = `/${stage}/data`;
+                    }, 1500);
+                } else {
+                    showError(data.error || 'Failed to add item');
+                }
+            })
+            .catch(error => {
+                showError('Error: ' + error.message);
+            });
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            document.getElementById('successMessage').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

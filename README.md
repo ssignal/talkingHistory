@@ -1,14 +1,31 @@
 # Talking History - AWS Lambda Web Application
 
-A Python web application for managing history items, running on AWS Lambda with API Gateway and DynamoDB.
+A Python web application for managing encrypted history items, running on AWS Lambda with API Gateway and DynamoDB.
 
 ## Features
 
 - **Google OAuth2 Login**: User authentication via Google with email authorization
+- **Client-Side Encryption**: All data encrypted with user's secret key before storing in DynamoDB
+- **User-Specific Data**: Each user can only see their own encrypted data
+- **Secret Key Management**: Secret key stored securely in browser localStorage
 - **Data Management**: Create, read, update, and delete history items
 - **Date-based Views**: Default 2-week data view with next/previous navigation
-- **Search Functionality**: Search by date range, name, or across all fields
+- **Advanced Search**: Search with AND/OR logic, case sensitivity options
 - **Two-stage Deployment**: Support for dev and op (production) environments
+- **Admin Features**: User management page for admins only
+
+## Security Model
+
+### Encryption
+- **Client-Side**: All sensitive data (name, text/description) is encrypted using AES encryption in the browser before sending to the server
+- **Secret Key**: User-provided secret key stored only in browser localStorage (never sent to server)
+- **DynamoDB**: Stores only encrypted data
+- **Search**: Performed client-side after decrypting data (for security)
+
+### Access Control
+- Users can only access their own data
+- Admin can manage user permissions
+- Email-based authorization in DynamoDB users table
 
 ## Architecture
 
@@ -105,21 +122,22 @@ aws dynamodb put-item \
 
 ## API Endpoints
 
-- `GET /` - Redirect to login or data page
+- `GET /` - Redirect to login or secret page
 - `GET /login` - Login page
 - `POST /login` - Authenticate user
 - `GET /logout` - Logout user
+- `GET /secret` - Secret key entry page
 - `GET /data` - Data management page
+- `GET /add` - Add new item page
 - `GET /search` - Search page
 - `GET /users` - User management page (admin only)
 - `GET /api/users` - Get all users (admin only)
 - `POST /api/users` - Add new user (admin only)
 - `DELETE /api/users/<email>` - Remove user (admin only)
-- `GET /api/history` - Get history items (with date range)
-- `POST /api/history` - Create new history item
-- `PUT /api/history/<id>` - Update history item
+- `GET /api/history` - Get history items (user-specific, with date range)
+- `POST /api/history` - Create new history item (encrypted)
+- `PUT /api/history/<id>` - Update history item (encrypted)
 - `DELETE /api/history/<id>` - Delete history item
-- `GET /api/search` - Search history items
 
 ## DynamoDB Tables
 
@@ -129,7 +147,13 @@ aws dynamodb put-item \
 ### History Table
 - Primary Key: `id` (String)
 - Sort Key: `createdAt` (Number - Unix timestamp)
+- Additional Fields:
+  - `userId` (String) - User's email
+  - `name` (String) - Encrypted
+  - `description` (String) - Encrypted
+  - `text` (String) - Encrypted
 - GSI: `name-createdAt-index` for name-based queries
+- **Note**: All user data fields are encrypted client-side before storage
 
 ## Development
 
@@ -148,8 +172,12 @@ Stage selection is done via the `--stage` flag during deployment. The applicatio
 ## Security Notes
 
 - Set `GOOGLE_CLIENT_ID` environment variable before deployment
-- Set `SECRET_KEY` environment variable for production
+- Set `SECRET_KEY` environment variable for Flask sessions (different from user secret keys)
 - Add your domain to Google OAuth authorized origins
 - Only authorized email addresses in DynamoDB users table can access the app
+- User secret keys are stored only in browser localStorage
+- All sensitive data is encrypted client-side using AES encryption (CryptoJS library)
+- Data in DynamoDB is encrypted and can only be decrypted by the user with their secret key
+- **Important**: If a user loses their secret key, their data cannot be recovered
 - Use AWS Secrets Manager for sensitive credentials in production
 # talkingHistory

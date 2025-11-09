@@ -13,10 +13,20 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL")
+STAGE = os.environ.get("STAGE", "dev")
 
 dynamodb = boto3.resource("dynamodb")
 users_table = dynamodb.Table(os.environ["USERS_TABLE"])
 history_table = dynamodb.Table(os.environ["HISTORY_TABLE"])
+
+# CORS configuration
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
 
 def ensure_admin_user():
     """Ensure admin email is in the users table"""
@@ -40,7 +50,7 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if "user" not in session:
-            return redirect(url_for("login"))
+            return redirect(f"/{STAGE}/login")
         return f(*args, **kwargs)
 
     return decorated_function
@@ -50,7 +60,7 @@ def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if "user" not in session:
-            return redirect(url_for("login"))
+            return redirect(f"/{STAGE}/login")
         if session.get("email") != ADMIN_EMAIL:
             return jsonify({"error": "Admin access required"}), 403
         return f(*args, **kwargs)
@@ -61,15 +71,15 @@ def admin_required(f):
 @app.route("/")
 def index():
     if "user" in session:
-        return redirect(url_for("data_page"))
-    return redirect(url_for("login"))
+        return redirect(f"/{STAGE}/secret")
+    return redirect(f"/{STAGE}/login")
 
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
-        return render_template("login.html", google_client_id=GOOGLE_CLIENT_ID)
-
+        return render_template("login.html", google_client_id=GOOGLE_CLIENT_ID, stage=STAGE)
+    
     data = request.get_json()
     token = data.get("credential")
 
@@ -92,7 +102,7 @@ def login():
             session["email"] = email
             session["name"] = idinfo.get("name", "")
             session["is_admin"] = True
-            return jsonify({"success": True})
+            return jsonify({"success": True, "redirect": f"/{STAGE}/secret"})
 
         # Check if user is in allowed list
         response = users_table.get_item(Key={"email": email})
@@ -101,7 +111,7 @@ def login():
             session["email"] = email
             session["name"] = idinfo.get("name", "")
             session["is_admin"] = False
-            return jsonify({"success": True})
+            return jsonify({"success": True, "redirect": f"/{STAGE}/secret"})
         else:
             return jsonify({
                 "success": False, 
@@ -116,25 +126,37 @@ def login():
 @app.route("/logout")
 def logout():
     session.pop("user", None)
-    return redirect(url_for("login"))
+    return redirect(f"/{STAGE}/login")
+
+
+@app.route("/secret")
+@login_required
+def secret_page():
+    return render_template("secret.html", stage=STAGE)
 
 
 @app.route("/data")
 @login_required
 def data_page():
-    return render_template("data.html")
+    return render_template("data.html", stage=STAGE)
+
+
+@app.route("/add")
+@login_required
+def add_page():
+    return render_template("add.html", stage=STAGE)
 
 
 @app.route("/search")
 @login_required
 def search_page():
-    return render_template("search.html")
+    return render_template("search.html", stage=STAGE)
 
 
 @app.route("/users")
 @admin_required
 def users_page():
-    return render_template("users.html")
+    return render_template("users.html", stage=STAGE)
 
 
 @app.route("/api/users", methods=["GET"])
@@ -184,6 +206,7 @@ def get_history():
     try:
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
+        user_email = session.get("email")
 
         if not start_date or not end_date:
             end_date = datetime.now()
@@ -191,12 +214,17 @@ def get_history():
             start_timestamp = int(start_date.timestamp() * 1000)
             end_timestamp = int(end_date.timestamp() * 1000)
         else:
-            start_timestamp = int(datetime.fromisoformat(start_date).timestamp() * 1000)
-            end_timestamp = int(datetime.fromisoformat(end_date).timestamp() * 1000)
+            # Remove 'Z' and parse as ISO format
+            start_date_clean = start_date.replace('Z', '+00:00')
+            end_date_clean = end_date.replace('Z', '+00:00')
+            start_timestamp = int(datetime.fromisoformat(start_date_clean).timestamp() * 1000)
+            end_timestamp = int(datetime.fromisoformat(end_date_clean).timestamp() * 1000)
 
+        # Filter by user email and date range
         response = history_table.scan(
-            FilterExpression="createdAt BETWEEN :start AND :end",
+            FilterExpression="userId = :userId AND createdAt BETWEEN :start AND :end",
             ExpressionAttributeValues={
+                ":userId": user_email,
                 ":start": start_timestamp,
                 ":end": end_timestamp,
             },
@@ -207,6 +235,9 @@ def get_history():
 
         return json.dumps({"items": items}, cls=DecimalEncoder)
     except Exception as e:
+        print(f"Error in get_history: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 
@@ -215,17 +246,39 @@ def get_history():
 def create_history():
     try:
         data = request.get_json()
+        
+        # Handle date field - could be timestamp or date string
+        item_date = data.get('date')
+        if item_date:
+            # If it's a date string, parse it
+            if isinstance(item_date, str):
+                try:
+                    # Try parsing as ISO date
+                    item_date_clean = item_date.replace('Z', '+00:00')
+                    created_at = int(datetime.fromisoformat(item_date_clean).timestamp() * 1000)
+                except:
+                    # If parsing fails, use current time
+                    created_at = int(datetime.now().timestamp() * 1000)
+            else:
+                created_at = int(item_date)
+        else:
+            created_at = int(datetime.now().timestamp() * 1000)
+        
         item = {
             "id": str(uuid.uuid4()),
-            "createdAt": int(datetime.now().timestamp() * 1000),
+            "createdAt": created_at,
             "name": data.get("name"),
-            "description": data.get("description"),
+            "description": data.get("description", ""),
+            "text": data.get("text", ""),
             "userId": session["user"],
         }
 
         history_table.put_item(Item=item)
         return json.dumps({"success": True, "item": item}, cls=DecimalEncoder)
     except Exception as e:
+        print(f"Error in create_history: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 
@@ -275,57 +328,74 @@ def search_history():
         end_date = request.args.get("endDate")
         name = request.args.get("name")
         search_text = request.args.get("searchText")
+        match_mode = request.args.get("matchMode", "all")  # 'all' or 'any'
+        case_sensitive = request.args.get("caseSensitive", "false").lower() == "true"
+        user_email = session.get("email")
 
-        if name:
-            start_timestamp = (
-                int(datetime.fromisoformat(start_date).timestamp() * 1000)
-                if start_date
-                else 0
-            )
-            end_timestamp = (
-                int(datetime.fromisoformat(end_date).timestamp() * 1000)
-                if end_date
-                else int(datetime.now().timestamp() * 1000)
-            )
+        # Get all items for this user
+        response = history_table.scan(
+            FilterExpression="userId = :userId",
+            ExpressionAttributeValues={
+                ":userId": user_email
+            }
+        )
+        items = response.get("Items", [])
 
-            response = history_table.query(
-                IndexName="name-createdAt-index",
-                KeyConditionExpression="#name = :name AND createdAt BETWEEN :start AND :end",
-                ExpressionAttributeNames={"#name": "name"},
-                ExpressionAttributeValues={
-                    ":name": name,
-                    ":start": start_timestamp,
-                    ":end": end_timestamp,
-                },
-            )
-            items = response.get("Items", [])
-        else:
-            response = history_table.scan()
-            items = response.get("Items", [])
-
+        # Apply filters based on match mode
+        filtered_items = []
+        
+        for item in items:
+            matches = []
+            
+            # Date range filter
             if start_date and end_date:
-                start_timestamp = int(
-                    datetime.fromisoformat(start_date).timestamp() * 1000
-                )
-                end_timestamp = int(datetime.fromisoformat(end_date).timestamp() * 1000)
-                items = [
-                    item
-                    for item in items
-                    if start_timestamp <= item["createdAt"] <= end_timestamp
-                ]
-
+                start_date_clean = start_date.replace('Z', '+00:00')
+                end_date_clean = end_date.replace('Z', '+00:00')
+                start_timestamp = int(datetime.fromisoformat(start_date_clean).timestamp() * 1000)
+                end_timestamp = int(datetime.fromisoformat(end_date_clean).timestamp() * 1000)
+                matches.append(start_timestamp <= item.get("createdAt", 0) <= end_timestamp)
+            
+            # Name filter
+            if name:
+                item_name = str(item.get("name", ""))
+                if case_sensitive:
+                    matches.append(name in item_name)
+                else:
+                    matches.append(name.lower() in item_name.lower())
+            
+            # Text search filter
             if search_text:
-                search_text_lower = search_text.lower()
-                items = [
-                    item
-                    for item in items
-                    if search_text_lower in str(item.get("name", "")).lower()
-                    or search_text_lower in str(item.get("description", "")).lower()
+                searchable_fields = [
+                    str(item.get("name", "")),
+                    str(item.get("description", "")),
+                    str(item.get("text", ""))
                 ]
+                searchable_text = " ".join(searchable_fields)
+                
+                if case_sensitive:
+                    matches.append(search_text in searchable_text)
+                else:
+                    matches.append(search_text.lower() in searchable_text.lower())
+            
+            # Apply match mode logic
+            if not matches:
+                # No filters specified, include all items
+                filtered_items.append(item)
+            elif match_mode == "all":
+                # All conditions must match
+                if all(matches):
+                    filtered_items.append(item)
+            else:  # match_mode == "any"
+                # At least one condition must match
+                if any(matches):
+                    filtered_items.append(item)
 
-        items.sort(key=lambda x: x["createdAt"], reverse=True)
-        return json.dumps({"items": items}, cls=DecimalEncoder)
+        filtered_items.sort(key=lambda x: x.get("createdAt", 0), reverse=True)
+        return json.dumps({"items": filtered_items}, cls=DecimalEncoder)
     except Exception as e:
+        print(f"Error in search_history: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 

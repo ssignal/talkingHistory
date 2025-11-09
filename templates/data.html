@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Data - Talking History</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -110,19 +111,24 @@
             <h1>History Data</h1>
             <div>
                 {% if session.get('is_admin') %}
-                <button class="btn btn-secondary" onclick="location.href='/users'">Manage Users</button>
+                <button class="btn btn-secondary" onclick="location.href='/{{ stage }}/users'">Manage Users</button>
                 {% endif %}
-                <button class="btn btn-secondary" onclick="location.href='/search'">Search</button>
-                <button class="btn btn-danger" onclick="location.href='/logout'">Logout</button>
+                <button class="btn btn-secondary" onclick="location.href='/{{ stage }}/search'">Search</button>
+                <button class="btn btn-primary" onclick="location.href='/{{ stage }}/add'">Add Item</button>
+                <button class="btn btn-danger" onclick="location.href='/{{ stage }}/logout'">Logout</button>
             </div>
         </div>
 
-        <button class="btn btn-primary" onclick="toggleAddForm()">+ Add New Item</button>
+        <div style="text-align: center; margin-bottom: 20px; padding: 10px; background-color: #e3f2fd; border-radius: 4px;">
+            <strong>Showing data from:</strong> <span id="dateRangeDisplay"></span>
+        </div>
+
+        <button class="btn btn-primary" onclick="toggleAddForm()">+ Add New Item (Inline)</button>
 
         <div class="add-form" id="addForm">
             <h3>Add New History Item</h3>
             <input type="text" id="newName" placeholder="Name" required>
-            <textarea id="newDescription" placeholder="Description" rows="3" required></textarea>
+            <textarea id="newDescription" placeholder="Text/Description" rows="3" required></textarea>
             <button class="btn btn-primary" onclick="addItem()">Save</button>
             <button class="btn btn-secondary" onclick="toggleAddForm()">Cancel</button>
         </div>
@@ -137,7 +143,7 @@
                 <tr>
                     <th>Select</th>
                     <th>Name</th>
-                    <th>Description</th>
+                    <th>Text/Description</th>
                     <th>Date</th>
                     <th>Actions</th>
                 </tr>
@@ -176,28 +182,62 @@
         let currentEndDate = new Date();
         let itemToDelete = null;
         let itemToEdit = null;
+        const stage = '{{ stage }}';
+        
+        // Check if secret key exists
+        const secretKey = localStorage.getItem('secretKey');
+        if (!secretKey) {
+            window.location.href = `/${stage}/secret`;
+        }
+
+        // Encryption/Decryption functions
+        function encryptData(text) {
+            return CryptoJS.AES.encrypt(text, secretKey).toString();
+        }
+
+        function decryptData(ciphertext) {
+            try {
+                const bytes = CryptoJS.AES.decrypt(ciphertext, secretKey);
+                return bytes.toString(CryptoJS.enc.Utf8);
+            } catch (e) {
+                console.error('Decryption error:', e);
+                return '[Decryption Failed]';
+            }
+        }
 
         function toggleAddForm() {
             const form = document.getElementById('addForm');
             form.style.display = form.style.display === 'none' ? 'block' : 'none';
         }
 
+        function updateDateRangeDisplay() {
+            const startStr = currentStartDate.toLocaleDateString();
+            const endStr = currentEndDate.toLocaleDateString();
+            document.getElementById('dateRangeDisplay').textContent = `${startStr} to ${endStr}`;
+        }
+
         function loadData() {
             const start = currentStartDate.toISOString();
             const end = currentEndDate.toISOString();
 
-            fetch(`/api/history?startDate=${start}&endDate=${end}`)
+            updateDateRangeDisplay();
+
+            fetch(`/${stage}/api/history?startDate=${start}&endDate=${end}`)
                 .then(response => response.json())
                 .then(data => {
                     const tbody = document.getElementById('dataTable');
                     tbody.innerHTML = '';
                     
                     data.items.forEach(item => {
+                        // Decrypt the data
+                        const decryptedName = decryptData(item.name);
+                        const decryptedText = decryptData(item.text || item.description || '');
+                        
                         const row = tbody.insertRow();
                         row.innerHTML = `
                             <td><input type="radio" name="selectItem" value="${item.id}" data-created="${item.createdAt}"></td>
-                            <td>${item.name}</td>
-                            <td>${item.description}</td>
+                            <td>${decryptedName}</td>
+                            <td>${decryptedText}</td>
                             <td>${new Date(item.createdAt).toLocaleString()}</td>
                             <td>
                                 <button class="btn btn-secondary" onclick='editItem(${JSON.stringify(item)})'>Edit</button>
@@ -212,10 +252,18 @@
             const name = document.getElementById('newName').value;
             const description = document.getElementById('newDescription').value;
 
-            fetch('/api/history', {
+            // Encrypt the data before sending
+            const encryptedName = encryptData(name);
+            const encryptedDescription = encryptData(description);
+
+            fetch(`/${stage}/api/history`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, description })
+                body: JSON.stringify({ 
+                    name: encryptedName, 
+                    text: encryptedDescription,
+                    description: encryptedDescription 
+                })
             })
             .then(response => response.json())
             .then(data => {
@@ -235,7 +283,7 @@
 
         function confirmDelete() {
             if (itemToDelete) {
-                fetch(`/api/history/${itemToDelete.id}?createdAt=${itemToDelete.createdAt}`, {
+                fetch(`/${stage}/api/history/${itemToDelete.id}?createdAt=${itemToDelete.createdAt}`, {
                     method: 'DELETE'
                 })
                 .then(response => response.json())
@@ -265,7 +313,7 @@
                 const name = document.getElementById('editName').value;
                 const description = document.getElementById('editDescription').value;
 
-                fetch(`/api/history/${itemToEdit.id}`, {
+                fetch(`/${stage}/api/history/${itemToEdit.id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -303,6 +351,8 @@
             loadData();
         }
 
+        // Initialize date range display and load data
+        updateDateRangeDisplay();
         loadData();
     </script>
 </body>

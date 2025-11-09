@@ -112,8 +112,8 @@
         <div class="header">
             <h1>User Management</h1>
             <div>
-                <button class="btn btn-secondary" onclick="location.href='/data'">Back to Data</button>
-                <button class="btn btn-danger" onclick="location.href='/logout'">Logout</button>
+                <button class="btn btn-secondary" onclick="location.href='/{{ stage }}/data'">Back to Data</button>
+                <button class="btn btn-danger" onclick="location.href='/{{ stage }}/logout'">Logout</button>
             </div>
         </div>
 
@@ -151,6 +151,7 @@
 
     <script>
         let userToDelete = null;
+        const stage = '{{ stage }}';
 
         function toggleAddForm() {
             const form = document.getElementById('addForm');
@@ -159,7 +160,7 @@
         }
 
         function loadUsers() {
-            fetch('/api/users')
+            fetch(`/${stage}/api/users`)
                 .then(response => response.json())
                 .then(data => {
                     const tbody = document.getElementById('usersTable');
@@ -199,7 +200,7 @@
                 return;
             }
 
-            fetch('/api/users', {
+            fetch(`/${stage}/api/users`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: email })
@@ -225,7 +226,7 @@
 
         function confirmDelete() {
             if (userToDelete) {
-                fetch(`/api/users/${encodeURIComponent(userToDelete)}`, {
+                fetch(`/${stage}/api/users/${encodeURIComponent(userToDelete)}`, {
                     method: 'DELETE'
                 })
                 .then(response => response.json())
